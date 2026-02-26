@@ -1,0 +1,18 @@
+[project]
+name = "openrecon"
+version = "0.1.0"
+description = "Passive reconnaissance tool"
+authors = [{ name = "TORSOO" }]
+
+dependencies = [
+    "requests",
+    "beautifulsoup4",
+    "python-whois"
+]
+
+[project.scripts]
+openrecon = "openrecon.cli:main"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
