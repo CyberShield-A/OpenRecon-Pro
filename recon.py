@@ -1,12 +1,18 @@
 import sys
+import os
 import json
 import requests
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
+
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from core.engine import run
 from modules.search import search_b
 from utils.logger import banner, loading, success, warning
 
 def fetch_html(url):
-    if not url.startswith(("http://","https://")):
+    if not url.startswith(("http://", "https://")):
         url = "https://" + url.lstrip("https://")
     try:
         r = requests.get(url, timeout=10)
@@ -14,45 +20,98 @@ def fetch_html(url):
             return r.text
         else:
             warning(f"Non-200 response from {url} ({r.status_code})")
-    except:
+    except Exception:
         warning(f"Failed to fetch {url}")
     return ""
 
+def clean_bing_url(url):
+    parsed = urllib.parse.urlparse(url)
+    query = urllib.parse.parse_qs(parsed.query)
+    if "u" in query:
+        decoded = urllib.parse.unquote(query["u"][0])
+        return decoded
+    return url
+
+def fetch_all_html(links, max_threads=5):
+    combined_html = ""
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        future_to_link = {executor.submit(fetch_html, link): link for link in links}
+        for i, future in enumerate(future_to_link, 1):
+            link = future_to_link[future]
+            loading(f"Fetching {i}/{len(links)}: {link}")
+            combined_html += future.result()
+    return combined_html
+
 def main():
     banner()
-    if len(sys.argv)<2:
-        print("Usage: python main.py <target> [--output file.json] [--limit N]")
+    if len(sys.argv) < 2:
+        print("Usage: python recon.py <target> [--output file.json] [--limit N] [--stealth] [--aggressive]")
         sys.exit(1)
 
     target = sys.argv[1]
     output_file = None
-    max_links = 10  # par défaut
+    max_links = 10
+    mode = "NORMAL"
 
     if "--output" in sys.argv:
         idx = sys.argv.index("--output")
-        if idx+1 < len(sys.argv):
-            output_file = sys.argv[idx+1]
+        if idx + 1 < len(sys.argv):
+            output_file = sys.argv[idx + 1]
+
     if "--limit" in sys.argv:
         idx = sys.argv.index("--limit")
-        if idx+1 < len(sys.argv):
-            try: max_links=int(sys.argv[idx+1])
-            except: pass
+        if idx + 1 < len(sys.argv):
+            try:
+                max_links = int(sys.argv[idx + 1])
+            except Exception:
+                pass
+
+    if "--stealth" in sys.argv:
+        mode = "STEALTH"
+    if "--aggressive" in sys.argv:
+        mode = "AGGRESSIVE"
 
     print(f"\n[+] Target: {target}")
+    print(f"[+] Mode: {mode}")
     print("[+] Searching Bing...")
-    links = search_b(target, limit=max_links)
-    combined_html = ""
-    for i, link in enumerate(links,1):
-        loading(f"Fetching {i}/{len(links)}: {link}")
-        combined_html += fetch_html(link)
+
+    raw_links = search_b(target, limit=max_links)
+    links = [clean_bing_url(u) for u in raw_links]
+
+    combined_html = fetch_all_html(links, max_threads=5)
     success("Fetching completed.")
 
-    results = run(target, html=combined_html, base_url=target, live_output=True, max_pages=50)
+    results = run(
+        target,
+        html=combined_html,
+        base_url=target,
+        live_output=True,
+        max_pages=50,
+        mode=mode
+    )
+
+    final_results = {
+        "target": target,
+        "recon_results": results
+    }
 
     if output_file:
-        with open(output_file,"w") as f:
-            json.dump(results, f, indent=4)
-        success(f"Results exported to {output_file}")
+        try:
+            with open(output_file, "w") as f:
+                json.dump(final_results, f, indent=4)
+            success(f"Results exported to {output_file}")
+        except Exception as e:
+            warning(f"Failed to export JSON: {str(e)}")
 
-if __name__=="__main__":
+    total_subs = len(results.get("subdomains", []))
+    print(f"\n[+] Recon completed: {total_subs} valid subdomains found.")
+    for sub in results.get("subdomains", []):
+        sub_name = sub.get("subdomain", "N/A")
+        ips = ",".join(sub.get("ips", [])) if sub.get("ips") else "N/A"
+        conf = sub.get("confidence", 0)
+        cdn = sub.get("cdn") or "-"
+        waf = sub.get("waf") or "-"
+        print(f"[SUBDOMAIN] {sub_name} | IPs: {ips} | Confidence: {conf}% | CDN: {cdn} | WAF: {waf}")
+
+if __name__ == "__main__":
     main()
