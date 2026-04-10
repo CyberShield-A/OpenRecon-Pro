@@ -1,7 +1,12 @@
 __pycache__/
 *.pyc
 venv/
-.env/
+.env
 .vscode/*
 !.vscode/launch.json
 !.vscode/settings.json
+
+# Fichiers générés par les scans
+rapport_*.txt
+rapport_*.html
+*.json

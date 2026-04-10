@@ -1,5 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
+from urllib.parse import quote_plus
 import logging
 import re
 
@@ -8,7 +9,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 def search_b(query, limit=10):
     results = []
     try:
-        url = f"https://www.bing.com/search?q={query}"
+        url = f"https://www.bing.com/search?q={quote_plus(query)}"
         response = requests.get(url, headers=HEADERS, timeout=10)
 
         if response.status_code != 200:
@@ -17,9 +18,10 @@ def search_b(query, limit=10):
 
         soup = BeautifulSoup(response.text, "html.parser")
 
+        bing_internal = ("bing.com", "microsoft.com", "msn.com", "live.com", "microsofttranslator.com")
         for a in soup.find_all("a", href=True):
             link = a["href"]
-            if link.startswith("http"):
+            if link.startswith("http") and not any(d in link for d in bing_internal):
                 results.append(link)
 
         return list(set(results))[:limit]
