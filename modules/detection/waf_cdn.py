@@ -42,7 +42,7 @@ def detect_cdn_waf(subdomain):
                     result["cdn"] = provider
                     result["waf"] = provider + " WAF"
 
-    except:
+    except requests.RequestException:
         pass
 
     return result

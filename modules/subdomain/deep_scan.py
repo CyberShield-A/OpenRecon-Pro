@@ -18,13 +18,13 @@ def deep_subdomain_scan(target, mode="NORMAL", live_output=False):
     # 1. Collecte des candidats
     loading(f"Collecte passive pour {target}...")
     passive = from_crtsh(target)
-    print(f"[DEBUG] Crt.sh a trouvé : {len(passive)} domaines") # Pour debug dans PowerShell
+    info(f"crt.sh : {len(passive)} domaines trouvés")
 
     loading(f"Génération brute-force pour {target}...")
     brute = from_bruteforce(target)
     
     candidates = passive.union(brute)
-    print(f"[DEBUG] Total candidats à tester : {len(candidates)}")
+    info(f"Total candidats à tester : {len(candidates)}")
 
     # 2. Résolution DNS en parallèle
     max_threads = 50 if mode == "AGGRESSIVE" else 20
