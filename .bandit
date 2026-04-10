@@ -1,0 +1,2 @@
+exclude_dirs: ['tests', 'venv', '.git']
+skips: ['B101'] # Optionnel : ignore les erreurs sur l'utilisation de 'assert'

@@ -10,3 +10,13 @@ venv/
 rapport_*.txt
 rapport_*.html
 *.json
+
+# Terraform (Crucial pour la sécurité)
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Rapports de sécurité supplémentaires
+bandit-report.txt
+results.xml
