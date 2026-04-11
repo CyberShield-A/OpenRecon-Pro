@@ -1,5 +1,5 @@
 import requests
-import random
+import secrets
 
 CDN_PATTERNS = {
     "Cloudflare": ["cloudflare", "cf-ray"],
@@ -17,7 +17,7 @@ USER_AGENTS = [
 ]
 
 def random_user_agent():
-    return random.choice(USER_AGENTS)
+    return secrets.choice(USER_AGENTS)
 
 def detect_cdn_waf(subdomain):
 

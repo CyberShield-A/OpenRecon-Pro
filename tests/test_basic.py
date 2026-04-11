@@ -1,2 +1,3 @@
 def test_logic():
-    assert 1 + 1 == 2
+    if 1 + 1 != 2:
+        raise AssertionError()
