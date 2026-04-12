@@ -1,0 +1,7 @@
+- name: Test de configuration
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Message de confirmation
+      debug:
+        msg: "Ansible a été lancé avec succès par Jenkins !"
