@@ -25,4 +25,4 @@ COPY . .
 EXPOSE 5000
 
 # Commande de lancement
-CMD ["python", "recon.py"]
+CMD ["python", "gui.py"]

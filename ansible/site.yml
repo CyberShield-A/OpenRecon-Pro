@@ -1,7 +1,22 @@
-- name: Test de configuration
+---
+- name: Finalisation du déploiement OpenRecon
   hosts: localhost
   connection: local
   tasks:
-    - name: Message de confirmation
+    - name: Attendre que l'application soit prête sur le port 8081
+      wait_for:
+        port: 8081
+        delay: 5
+        timeout: 30
+      register: port_check
+
+    - name: Vérifier l'accès HTTP à l'interface
+      uri:
+        url: "http://localhost:8081"
+        status_code: 200
+      register: web_check
+
+    - name: Confirmation du succès
       debug:
-        msg: "Ansible a été lancé avec succès par Jenkins !"
+        msg: "✅ OpenRecon est en ligne et accessible pour les utilisateurs !"
+      when: web_check.status == 200
