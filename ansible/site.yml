@@ -1,14 +1,21 @@
-- name: Attendre que l'application soit prête
+---
+- name: Post-déploiement OpenRecon
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Attendre que l'application soit prête
       wait_for:
+        host: 0.0.0.0
         port: 8081
-        delay: 10 # On attend 10s que le serveur Python charge
-        timeout: 60
+        state: started
+        delay: 5
+        timeout: 30
 
     - name: Vérifier l'accès HTTP
       uri:
         url: "http://localhost:8081"
         status_code: 200
-      register: web_check
-      until: web_check.status == 200
-      retries: 5 # On réessaie 5 fois si jamais c'est un peu lent
+      register: result
+      until: result.status == 200
+      retries: 5
       delay: 5
