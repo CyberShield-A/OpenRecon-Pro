@@ -7,33 +7,31 @@ terraform {
   }
 }
 
-# On indique à Terraform d'utiliser le moteur Docker de ta machine hôte
 provider "docker" {
   host = "unix:///var/run/docker.sock"
 }
 
-# 1. Construction de l'image Docker à partir du Dockerfile
+# 1. Construction automatique de l'image Docker à partir du Dockerfile racine
 resource "docker_image" "openrecon_img" {
   name = "openrecon-app:latest"
   build {
-    context = ".." # On remonte d'un cran pour trouver le Dockerfile à la racine
+    context    = ".." # Dossier parent car main.tf est dans terraform/
     dockerfile = "Dockerfile"
   }
 }
 
-# 2. Création et lancement du conteneur
+# 2. Gestion du conteneur (Suppression et re-création automatique)
 resource "docker_container" "openrecon_container" {
-  image = docker_image.openrecon_img.image_id
   name  = "openrecon-service"
+  image = docker_image.openrecon_img.image_id
   
-  # On mappe le port pour éviter le conflit avec Jenkins (8080)
   ports {
     internal = 5000
-    external = 8081 
+    external = 8081 # Accessible sur http://localhost:8081
   }
 
-  # Optionnel : On peut passer des variables d'environnement si besoin
-  env = [
-    "APP_ENV=production"
-  ]
+  restart = "always"
+  
+  # On force la mise à jour si l'image change
+  must_run = true
 }
