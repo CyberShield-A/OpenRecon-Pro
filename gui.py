@@ -254,4 +254,4 @@ if __name__ in {"__main__", "__mp_main__"}:
     gui = OpenReconGUI()
     gui.build()
     # PORT 5000 pour Docker / RELOAD False pour la prod
-    ui.run(title="OpenRecon Pro", dark=True, port=5000, reload=False)
+    ui.run(title="OpenRecon Pro", dark=True, host='0.0.0.0', port=5000, reload=False)
