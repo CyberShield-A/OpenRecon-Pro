@@ -137,7 +137,7 @@ class OpenReconGUI:
                 ui.label("Non analysé.").classes('text-gray-500 italic')
 
     async def generate_ai_report(self):
-        """Génère un rapport IA via Ollama (modèle fixé côté backend)."""
+        """Génère un rapport IA via Ollama."""
         if not self.last_results or self.is_generating_report:
             return
 
@@ -157,7 +157,7 @@ class OpenReconGUI:
                 self.log_area.push("✅ Rapport IA généré avec succès.")
                 ui.notify("Rapport généré !", type="positive")
             else:
-                self.report_area.content = "**Erreur** : Impossible de générer le rapport. Vérifiez qu'Ollama est lancé (`ollama serve`) et que le modèle est installé (`ollama pull llama3`)."
+                self.report_area.content = "**Erreur** : Impossible de générer le rapport. Vérifiez Ollama."
                 ui.notify("Échec de la génération du rapport.", type="negative")
         except Exception as e:
             self.report_area.content = f"**Erreur** : {str(e)}"
@@ -184,17 +184,17 @@ class OpenReconGUI:
         # --- Header ---
         with ui.header().classes('bg-slate-900 border-b border-slate-800 p-4 justify-between items-center'):
             ui.label('OPENRECON PRO').classes('text-2xl font-black tracking-tighter text-blue-500')
-            ui.badge('v3.13', color='blue')
+            ui.badge('v3.13 - SECURE DEPLOY', color='blue')
 
-        # --- Main Layout ---
+        # --- Main Column ---
         with ui.column().classes('w-full max-w-5xl mx-auto p-6 gap-6'):
             
-            # Input
+            # Input Section
             with ui.row().classes('w-full gap-4'):
                 target_input = ui.input(label='Domaine cible', placeholder='google.com').classes('flex-grow').props('dark outlined')
                 ui.button('LANCER L\'ANALYSE', on_click=lambda: self.start_scan(target_input.value)).props('color=blue icon=bolt').classes('h-14 px-6')
 
-            # Stats Cards
+            # Top Stats
             with ui.row().classes('w-full gap-4'):
                 with ui.card().classes('flex-1 bg-slate-900 border border-slate-800'):
                     ui.label('SOUS-DOMAINES').classes('text-xs text-gray-500')
@@ -206,16 +206,16 @@ class OpenReconGUI:
                     ui.label('JOKER (Wildcard)').classes('text-xs text-gray-500')
                     self.wildcard_info = ui.label('N / A').classes('text-xl text-green-400')
                 with ui.card().classes('flex-1 bg-slate-900 border border-slate-800'):
-                    ui.label('SÉCURITÉ HEADERS').classes('text-xs text-gray-500')
+                    ui.label('SECURITY SCORE').classes('text-xs text-gray-500')
                     self.headers_score = ui.label('N/A').classes('text-xl text-yellow-400')
 
-            # Results
+            # Main Results Table
             with ui.column().classes('w-full gap-4'):
                 with ui.card().classes('w-full bg-slate-900 border border-slate-800 h-80'):
                     ui.label('CIBLES DÉCOUVERTES').classes('text-xs font-bold text-blue-300 border-b border-slate-800 w-full pb-1')
                     self.subdomain_list = ui.scroll_area().classes('w-full h-full')
 
-                # WHOIS + Tech side by side
+                # Side by Side WHOIS and TECH
                 with ui.row().classes('w-full gap-4'):
                     with ui.card().classes('flex-1 bg-slate-900 border border-slate-800'):
                         ui.label('WHOIS').classes('text-xs font-bold text-cyan-300 border-b border-slate-800 w-full pb-1')
@@ -224,33 +224,29 @@ class OpenReconGUI:
                         ui.label('TECHNOLOGIES').classes('text-xs font-bold text-indigo-300 border-b border-slate-800 w-full pb-1')
                         self.tech_area = ui.row().classes('w-full py-2 flex-wrap')
 
-                # Security Headers
+                # Headers Analysis
                 with ui.card().classes('w-full bg-slate-900 border border-slate-800'):
-                    ui.label('EN-TÊTES DE SÉCURITÉ HTTP').classes('text-xs font-bold text-yellow-300 border-b border-slate-800 w-full pb-1')
+                    ui.label('ANALYSE DES EN-TÊTES HTTP').classes('text-xs font-bold text-yellow-300 border-b border-slate-800 w-full pb-1')
                     self.headers_area = ui.column().classes('w-full py-2')
 
+                # Logs
                 with ui.card().classes('w-full bg-black border border-slate-800 h-48'):
-                    ui.label('JOURNAUX SYSTÈME').classes('text-xs text-green-500 font-mono')
+                    ui.label('CONSOLES LOGS').classes('text-xs text-green-500 font-mono')
                     self.log_area = ui.log().classes('w-full h-full text-[11px] font-mono text-gray-400')
 
-            # AI Report Section
+            # AI Section
             with ui.column().classes('w-full gap-4'):
                 with ui.card().classes('w-full bg-slate-900 border border-slate-800'):
-                    ui.label('RAPPORT IA (OLLAMA)').classes('text-xs font-bold text-purple-300 border-b border-slate-800 w-full pb-1')
+                    ui.label('RAPPORT IA').classes('text-xs font-bold text-purple-300 border-b border-slate-800 w-full pb-1')
                     with ui.row().classes('w-full gap-4 items-center py-2'):
-                        self.report_btn = ui.button(
-                            'GÉNÉRER LE RAPPORT',
-                            on_click=lambda: self.generate_ai_report()
-                        ).props('color=purple icon=smart_toy').classes('h-10 px-4')
+                        self.report_btn = ui.button('GÉNÉRER', on_click=lambda: self.generate_ai_report()).props('color=purple icon=smart_toy').classes('h-10 px-4')
                         self.report_btn.disable()
-                        self.export_html_btn = ui.button(
-                            'EXPORTER HTML',
-                            on_click=lambda: self.export_report_html()
-                        ).props('color=teal icon=download').classes('h-10 px-4')
+                        self.export_html_btn = ui.button('EXPORT HTML', on_click=lambda: self.export_report_html()).props('color=teal icon=download').classes('h-10 px-4')
                         self.export_html_btn.disable()
-                    self.report_area = ui.markdown("*Lancez un scan puis cliquez sur 'Générer le rapport'.*").classes('w-full text-sm text-gray-300 p-2')
+                    self.report_area = ui.markdown("*Lancez un scan pour débloquer l'IA.*").classes('w-full text-sm text-gray-300 p-2')
 
 if __name__ in {"__main__", "__mp_main__"}:
     gui = OpenReconGUI()
     gui.build()
-    ui.run(title="OpenRecon Pro", dark=True, port=int(get("GUI_PORT", 8080)))
+    # On bind sur 0.0.0.0 pour Docker. # nosec bypass l'alerte Bandit B104.
+    ui.run(title="OpenRecon Pro", dark=True, host='0.0.0.0', port=5000, reload=False) # nosec

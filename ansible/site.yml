@@ -1,0 +1,21 @@
+---
+- name: Post-déploiement OpenRecon
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Attendre que l'application soit prête
+      wait_for:
+        host: 0.0.0.0
+        port: 8081
+        state: started
+        delay: 5
+        timeout: 30
+
+    - name: Vérifier l'accès HTTP
+      uri:
+        url: "http://localhost:8081"
+        status_code: 200
+      register: result
+      until: result.status == 200
+      retries: 5
+      delay: 5
