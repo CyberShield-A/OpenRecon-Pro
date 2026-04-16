@@ -192,7 +192,7 @@ class OpenReconGUI:
             # Input Section
             with ui.row().classes('w-full gap-4'):
                 target_input = ui.input(label='Domaine cible', placeholder='google.com').classes('flex-grow').props('dark outlined')
-                ui.button('LANCER L\'ANALYSE', on_click=lambda: self.start_scan(target_input.value)).props('color=blue icon=bolt').classes('h-14 px-6')
+                ui.button('COMMENCER L\'ANALYSE', on_click=lambda: self.start_scan(target_input.value)).props('color=blue icon=bolt').classes('h-14 px-6')
 
             # Top Stats
             with ui.row().classes('w-full gap-4'):
