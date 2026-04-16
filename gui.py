@@ -250,3 +250,4 @@ if __name__ in {"__main__", "__mp_main__"}:
     gui.build()
     # On bind sur 0.0.0.0 pour Docker. # nosec bypass l'alerte Bandit B104.
     ui.run(title="OpenRecon Pro", dark=True, host='0.0.0.0', port=5000, reload=False) # nosec
+# Mise à jour auto active
