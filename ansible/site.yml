@@ -1,16 +1,16 @@
 ---
-- name: Post-déploiement Op---
-- name: Post-déploiement OpenRecon
+- name: Post-deploiement OpenRecon
   hosts: localhost
   connection: local
+  gather_facts: false
   tasks:
-    - name: Attendre que le port 8081 réponde
+    - name: Attendre que le port 8081 reponde
       wait_for:
         port: 8081
         delay: 5
         timeout: 60
 
-    - name: Vérifier l'accès HTTP
+    - name: Verifier l'acces HTTP
       uri:
         url: "http://localhost:8081"
         status_code: 200
