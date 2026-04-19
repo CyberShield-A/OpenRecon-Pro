@@ -1,14 +1,14 @@
 FROM python:3.10-slim
+
 WORKDIR /app
 COPY requirements.txt .
 
-# Mise à jour de pip et augmentation du timeout pour les packages lourds
-RUN pip install --upgrade pip && \
-    pip install --default-timeout=100 --no-cache-dir -r requirements.txt
+# On augmente les retries et on donne un timeout très large (1000s = ~16 min)
+# On utilise python -m pip pour être sûr d'utiliser le bon exécutable
+RUN python -m pip install --upgrade pip --retries 10 --timeout 60 && \
+    python -m pip install --no-cache-dir --retries 10 --default-timeout=1000 -r requirements.txt
 
 COPY . .
-
-# Note: COPY . . copie déjà tout, cette ligne est redondante mais inoffensive
 COPY gui.py . 
 
 EXPOSE 5000
