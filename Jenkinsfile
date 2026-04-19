@@ -1,36 +1,38 @@
 pipeline {
     agent any
-    options {
-        skipDefaultCheckout()
-        timeout(time: 1, unit: 'HOURS')
-    }
+    
     stages {
         stage('0. Préparation du Serveur') {
             steps {
                 dir('ansible') {
-                    // Cette étape répare automatiquement Docker/DNS en cas de problème
+                    // Le code est maintenant présent car le checkout se fait automatiquement au démarrage
                     sh 'ansible-playbook -i "localhost," -c local setup_env.yml'
                 }
             }
         }
-        stage('1. Préparation Code') {
-            steps {
-                deleteDir()
-                checkout scm
-            }
-        }
-        stage('2. Audit & Tests') {
+        
+        stage('1. Audit & Tests') {
             parallel {
-                stage('Bandit') { steps { sh 'bandit -c .bandit -r . || true' } }
-                stage('Pytest') { steps { sh 'pytest' } }
+                stage('Bandit') { 
+                    steps { 
+                        sh 'bandit -c .bandit -r . || true' 
+                    } 
+                }
+                stage('Pytest') { 
+                    steps { 
+                        sh 'pytest' 
+                    } 
+                }
             }
         }
-        stage('3. Build Image') {
+        
+        stage('2. Build Image') {
             steps {
                 sh 'docker build -t openrecon-app:latest .'
             }
         }
-        stage('4. Infrastructure (Terraform)') {
+        
+        stage('3. Infrastructure (Terraform)') {
             steps {
                 dir('terraform') {
                     sh 'docker rm -f openrecon-service || true'
@@ -39,7 +41,8 @@ pipeline {
                 }
             }
         }
-        stage('5. Vérification (Ansible)') {
+        
+        stage('4. Vérification (Ansible)') {
             steps {
                 dir('ansible') {
                     sh 'ansible-playbook -i "localhost," -c local site.yml'
@@ -47,6 +50,7 @@ pipeline {
             }
         }
     }
+    
     post {
         failure { 
             sh 'docker rm -f openrecon-service || true' 
