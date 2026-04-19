@@ -1,0 +1,23 @@
+---
+- name: Preparation de l'environnement Docker
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: yes
+  tasks:
+    - name: Créer le répertoire de configuration Docker
+      file:
+        path: /etc/docker
+        state: directory
+
+    - name: Configurer les DNS pour Docker (Évite les TLS Timeouts)
+      copy:
+        content: '{"dns": ["8.8.8.8", "1.1.1.1"]}'
+        dest: /etc/docker/daemon.json
+      notify: Redémarrer Docker
+
+  handlers:
+    - name: Redémarrer Docker
+      service:
+        name: docker
+        state: restarted
