@@ -4,8 +4,11 @@ pipeline {
     stages {
         stage('0. Préparation du Serveur') {
             steps {
+                // --- DEBUG : Cette commande va afficher tous les fichiers trouvés par Jenkins ---
+                sh 'ls -R'
+                // -----------------------------------------------------------------------------
+                
                 dir('ansible') {
-                    // Le code est maintenant présent car le checkout se fait automatiquement au démarrage
                     sh 'ansible-playbook -i "localhost," -c local setup_env.yml'
                 }
             }
