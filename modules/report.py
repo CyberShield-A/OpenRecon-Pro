@@ -1,318 +1,165 @@
 # modules/report.py
-import json
+import re as _re
 from datetime import datetime
 from utils.logger import info, warning, success
 from utils.config import get
+from modules.prompts import get_system_prompt, build_full_prompt, USER_ROLES, SCAN_TYPES
 
-# Modèle Ollama chargé depuis .env (clé OLLAMA_MODEL), défini côté backend uniquement
-OLLAMA_MODEL = get("OLLAMA_MODEL", "llama3.1:8b")
-
-def build_prompt(target, results):
-    """Construit le prompt pour Ollama à partir de TOUS les résultats du scan."""
-    subdomains = results.get("subdomains", [])
-    cdn_waf = results.get("cdn_waf", "Aucun")
-    wildcard = results.get("wildcard", "Désactivé")
-    whois_data = results.get("whois", {})
-    headers_data = results.get("security_headers", {})
-    tech_data = results.get("technologies", {})
-
-    # --- Section sous-domaines ---
-    sub_details = ""
-    for s in subdomains:
-        name = s.get("subdomain", "?")
-        ips = ", ".join(s.get("ips", []))
-        conf = s.get("confidence", 0)
-        sub_details += f"  - {name} (IPs: {ips}, Confiance: {conf}%)\n"
-    if not sub_details:
-        sub_details = "  Aucun sous-domaine découvert.\n"
-
-    # --- Section RDAP ---
-    whois_section = "Non disponible"
-    if whois_data and whois_data.get("registrar"):
-        whois_section = f"""  Registrar : {whois_data.get('registrar', 'Inconnu')}
-  Propriétaire : {whois_data.get('registrant', 'Non disponible')}
-  Date de création : {whois_data.get('creation_date', 'Inconnue')}
-  Date d'expiration : {whois_data.get('expiration_date', 'Inconnue')}
-  Serveurs DNS : {', '.join(whois_data.get('name_servers', [])) or 'N/A'}
-  Emails exposés : {', '.join(whois_data.get('emails', [])) or 'Aucun'}
-  Protection vie privée : {'Oui' if whois_data.get('privacy') else 'Non — les informations du propriétaire sont PUBLIQUES'}
-  DNSSEC : {whois_data.get('dnssec', 'Inconnu')}"""
-
-    # --- Section headers de sécurité ---
-    headers_section = "Non analysé"
-    if headers_data and (headers_data.get("present") or headers_data.get("missing")):
-        present_list = "\n".join([f"    ✅ {h} : {v}" for h, v in headers_data.get("present", {}).items()]) or "    Aucun"
-        missing_list = ""
-        for h, details in headers_data.get("missing", {}).items():
-            missing_list += f"    ❌ {h} — Risque: {details['risk']} — {details['impact']}\n"
-        if not missing_list:
-            missing_list = "    Tous les en-têtes critiques sont présents."
-
-        headers_section = f"""  Score de sécurité : {headers_data.get('score', 0)}% (Grade: {headers_data.get('grade', 'N/A')})
-  Serveur : {headers_data.get('server', 'Non identifié')}
-  
-  En-têtes présents :
-{present_list}
-  
-  En-têtes MANQUANTS (vulnérabilités) :
-{missing_list}"""
-
-    # --- Section technologies ---
-    tech_section = "Non analysé"
-    if tech_data:
-        techs = tech_data.get("technologies", [])
-        if techs:
-            tech_lines = ""
-            for t in techs:
-                source = tech_data.get("details", {}).get(t, "")
-                tech_lines += f"  - {t} ({source})\n"
-            tech_section = f"""  Serveur web : {tech_data.get('server', 'Non identifié')}
-  Technologies détectées :
-{tech_lines}"""
-        else:
-            tech_section = "  Aucune technologie identifiée avec certitude."
-
-    prompt = f"""Tu es un expert senior en cybersécurité mandaté pour auditer le domaine "{target}". Tu rédiges un rapport de reconnaissance passive destiné à des décideurs et du personnel NON technique. Ton rapport doit être professionnel mais accessible.
-
-=============================================
-   RÉSULTATS COMPLETS DU SCAN DE RECONNAISSANCE
-=============================================
-
-🎯 CIBLE : {target}
-📅 Date du scan : {datetime.now().strftime('%d/%m/%Y à %H:%M')}
-
---- 1. SOUS-DOMAINES DÉCOUVERTS ({len(subdomains)} trouvés) ---
-{sub_details}
-Protection WAF/CDN détectée : {cdn_waf}
-DNS Wildcard : {wildcard}
-
---- 2. INFORMATIONS RDAP (Carte d'identité du domaine) ---
-{whois_section}
-
---- 3. EN-TÊTES DE SÉCURITÉ HTTP ---
-{headers_section}
-
---- 4. TECHNOLOGIES DÉTECTÉES ---
-{tech_section}
-
-=============================================
-   FIN DES RÉSULTATS
-=============================================
-
-INSTRUCTIONS DE RÉDACTION — À SUIVRE OBLIGATOIREMENT :
-
-Rédige le rapport en français en suivant EXACTEMENT cette structure :
-
-## 1. RÉSUMÉ EXÉCUTIF
-En 3-4 phrases maximum, explique ce qui a été analysé et les conclusions principales. Utilise des analogies concrètes. Par exemple : "Un sous-domaine, c'est comme une porte d'un bâtiment — chaque porte ouverte et non surveillée est un point d'entrée potentiel."
-
-## 2. CE QUE NOUS AVONS DÉCOUVERT
-
-### 2.1 Surface d'exposition (sous-domaines)
-- Combien de "portes" avons-nous trouvé ?
-- Lesquelles semblent sensibles (admin, staging, dev, vpn, internal) ?
-- Est-ce que le domaine a une protection WAF/CDN ? Explique ce que ça signifie concrètement.
-
-### 2.2 Carte d'identité du domaine (RDAP)
-- Le domaine expire-t-il bientôt ? (Si < 90 jours, c'est un risque)
-- Les informations du propriétaire sont-elles exposées publiquement ?
-- Les emails trouvés peuvent-ils être utilisés pour du phishing ?
-
-### 2.3 Protection du site web (en-têtes de sécurité)
-- Quel est le score de sécurité et qu'est-ce que ça veut dire concrètement ?
-- Pour CHAQUE en-tête manquant, explique le risque en langage simple avec une analogie.
-
-### 2.4 Technologies utilisées
-- Quelles technologies ont été identifiées ?
-- Y a-t-il des technologies obsolètes ou connues pour avoir des failles ?
-
-## 3. ÉVALUATION DU RISQUE
-Donne un niveau global : 🟢 Faible / 🟡 Moyen / 🟠 Élevé / 🔴 Critique
-Justifie en 2-3 phrases.
-
-## 4. PLAN D'ACTION (par priorité)
-Liste numérotée des actions de remédiation. Pour CHAQUE action :
-- **Quoi** : description simple de l'action
-- **Pourquoi** : quel risque ça élimine
-- **Qui doit le faire** : équipe technique, administrateur, direction
-- **Urgence** : Immédiate / Court terme / Moyen terme
-
-## 5. PROCHAINES ÉTAPES
-3 à 5 recommandations concrètes pour la suite.
-
-RÈGLES DE RÉDACTION :
-- JAMAIS de jargon technique sans explication entre parenthèses
-- Utilise des analogies du quotidien (porte, serrure, carte d'identité, etc.)
-- Sois factuel : base-toi UNIQUEMENT sur les données fournies, n'invente rien
-- Le rapport doit être compréhensible par un dirigeant d'entreprise sans bagage technique
-- Sois concis mais complet
-"""
-    return prompt
+OLLAMA_MODEL = get('OLLAMA_MODEL', 'llama3.1:8b')
 
 
-def generate_report(target, results, model=None):
+def generate_report(target, results, user_role='chef_entreprise', scan_type='complet', model=None):
     if model is None:
         model = OLLAMA_MODEL
-    """
-    Génère un rapport via Ollama.
-    Retourne le texte du rapport ou None en cas d'erreur.
-    """
+    if user_role not in USER_ROLES:
+        warning('Role inconnu, fallback chef_entreprise')
+        user_role = 'chef_entreprise'
+    if scan_type not in SCAN_TYPES:
+        scan_type = 'complet'
     try:
         import ollama
     except ImportError:
-        warning("Le package 'ollama' n'est pas installé. Installez-le avec : pip install ollama")
+        warning('Installez ollama: pip install ollama')
         return None
-
-    prompt = build_prompt(target, results)
-
-    info(f"Génération du rapport IA avec le modèle '{model}'...")
-    info("Cela peut prendre quelques instants...")
-
+    system_prompt = get_system_prompt(user_role)
+    user_prompt = build_full_prompt(target, results, user_role, scan_type)
+    role_label = USER_ROLES[user_role]
+    info('Generation rapport profil: ' + role_label + ', modele: ' + model)
+    info('Cela peut prendre quelques instants...')
     try:
-        response = ollama.chat(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Tu es un analyste senior en cybersécurité. "
-                        "Tu rédiges des rapports d'audit de reconnaissance passive. "
-                        "Tes rapports sont destinés à des personnes NON techniques (dirigeants, managers, RH). "
-                        "Tu utilises un langage clair, des analogies concrètes, et tu évites le jargon. "
-                        "Tu te bases UNIQUEMENT sur les données fournies — tu n'inventes jamais de failles ou de risques. "
-                        "Tu réponds toujours en français."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        )
-        report_text = response["message"]["content"]
-        success("Rapport IA généré avec succès.")
+        response = ollama.chat(model=model, messages=[
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user',   'content': user_prompt},
+        ])
+        report_text = response['message']['content']
+        success('Rapport genere pour profil: ' + role_label)
         return report_text
-
     except Exception as e:
-        error_msg = str(e)
-        if "connection" in error_msg.lower() or "refused" in error_msg.lower():
-            warning("Impossible de se connecter à Ollama. Vérifiez qu'Ollama est lancé (commande: ollama serve).")
-        elif "not found" in error_msg.lower() or "model" in error_msg.lower():
-            warning(f"Le modèle '{model}' n'est pas disponible. Téléchargez-le avec : ollama pull {model}")
+        err = str(e)
+        if 'connection' in err.lower() or 'refused' in err.lower():
+            warning('Ollama non accessible. Lancez: ollama serve')
+        elif 'not found' in err.lower() or 'model' in err.lower():
+            warning('Modele ' + model + ' introuvable. ollama pull ' + model)
         else:
-            warning(f"Erreur lors de la génération du rapport : {error_msg}")
+            warning('Erreur rapport: ' + err)
         return None
 
 
 def save_report(report_text, filepath):
-    """Sauvegarde le rapport dans un fichier texte."""
     try:
-        with open(filepath, "w", encoding="utf-8") as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
             f.write(report_text)
-        success(f"Rapport sauvegardé dans : {filepath}")
+        success('Rapport sauvegarde: ' + filepath)
     except IOError as e:
-        warning(f"Impossible de sauvegarder le rapport : {e}")
+        warning('Impossible sauvegarder: ' + str(e))
 
 
-def export_html(report_text, target, filepath):
-    """Exporte le rapport IA en fichier HTML stylisé et partageable."""
+def _markdown_to_html(text):
+    html = text
+    html = _re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=_re.MULTILINE)
+    html = _re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=_re.MULTILINE)
+    html = _re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
+    html = _re.sub(r'^- (.+)$', r'<li>\1</li>', html, flags=_re.MULTILINE)
+    html = _re.sub(r'`(.+?)`', r'<code>\1</code>', html)
+    html = html.replace('\n\n', '</p><p>')
+    return '<p>' + html + '</p>'
+
+
+def export_html_string(report_text, target, user_role=''):
+    html_body = _markdown_to_html(report_text)
+    date_str = datetime.now().strftime('%d/%m/%Y a %H:%M')
+    role_label = USER_ROLES.get(user_role, '')
+    role_badge = ('<span class="role-badge">' + role_label + '</span>') if role_label else ''
+    return (
+        '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1.0">'
+        '<title>Rapport OpenRecon Pro - ' + target + '</title>'
+        '<style>'
+        '*{margin:0;padding:0;box-sizing:border-box}'
+        'body{background:#0f172a;color:#e2e8f0;font-family:sans-serif;line-height:1.7;padding:40px 20px}'
+        '.container{max-width:900px;margin:0 auto}'
+        '.header{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:30px;margin-bottom:30px;text-align:center}'
+        '.header h1{color:#3b82f6;font-size:28px;margin-bottom:8px}'
+        '.header .meta{color:#94a3b8;font-size:14px}'
+        '.role-badge{display:inline-block;background:#1d4ed8;color:#bfdbfe;padding:3px 12px;border-radius:99px;font-size:12px;font-weight:600;margin-top:8px}'
+        '.content{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:30px}'
+        'h2{color:#3b82f6;margin:25px 0 12px;padding-bottom:6px;border-bottom:1px solid #334155;font-size:20px}'
+        'h3{color:#60a5fa;margin:18px 0 8px;font-size:16px}'
+        'p{margin:8px 0}li{margin:4px 0 4px 20px}'
+        'strong{color:#f1f5f9}'
+        'code{background:#0f172a;color:#34d399;padding:2px 6px;border-radius:4px;font-family:monospace;font-size:13px}'
+        '.footer{text-align:center;margin-top:30px;color:#64748b;font-size:12px}'
+        '@media print{body{background:white;color:#1e293b}'
+        '.header{background:#f1f5f9;border-color:#cbd5e1}'
+        '.header h1{color:#1e40af}'
+        '.content{background:white;border-color:#cbd5e1}'
+        'h2{color:#1e40af;border-color:#cbd5e1}h3{color:#2563eb}'
+        'code{background:#f1f5f9;color:#059669}}'
+        '</style></head><body>'
+        '<div class="container">'
+        '<div class="header"><h1>OPENRECON PRO</h1>'
+        '<div class="meta">Rapport d audit de reconnaissance passive<br>'
+        'Cible : <strong>' + target + '</strong> - ' + date_str + '<br>' + role_badge + '</div></div>'
+        '<div class="content">' + html_body + '</div>'
+        '<div class="footer">Genere par OpenRecon Pro - Rapport confidentiel</div>'
+        '</div></body></html>'
+    )
+
+
+def export_pdf_html_string(report_text, target, user_role=''):
+    """Génère un HTML optimisé pour l'export PDF WeasyPrint.
+    Fond blanc, texte noir, full-width, typographie professionnelle.
+    """
+    html_body = _markdown_to_html(report_text)
+    date_str = datetime.now().strftime('%d/%m/%Y à %H:%M')
+    role_label = USER_ROLES.get(user_role, '')
+    role_badge = ('<span class="role-badge">' + role_label + '</span>') if role_label else ''
+    return (
+        '<!DOCTYPE html><html lang="fr"><head>'
+        '<meta charset="UTF-8">'
+        '<title>Rapport OpenRecon Pro – ' + target + '</title>'
+        '<style>'
+        '@page{size:A4;margin:2.5cm 3cm}'
+        'body{background:white;color:#1a1a1a;font-family:Arial,Helvetica,sans-serif;'
+        'font-size:11pt;line-height:1.65;margin:0;padding:0}'
+        '.header{border-bottom:3px solid #1e3a8a;padding-bottom:18px;margin-bottom:28px}'
+        '.header h1{color:#1e3a8a;font-size:22pt;font-weight:700;margin:0 0 6px}'
+        '.header .meta{color:#374151;font-size:10pt;margin-top:4px}'
+        '.role-badge{display:inline-block;background:#1e3a8a;color:white;'
+        'padding:2px 10px;border-radius:99px;font-size:9pt;font-weight:600;margin-top:6px}'
+        'h2{color:#1e3a8a;font-size:14pt;font-weight:700;'
+        'border-bottom:1.5px solid #cbd5e1;padding-bottom:5px;margin:26px 0 12px}'
+        'h3{color:#1d4ed8;font-size:12pt;font-weight:600;margin:18px 0 8px}'
+        'p{margin:8px 0;color:#1a1a1a}'
+        'ul,ol{margin:8px 0;padding-left:0}'
+        'li{margin:5px 0;padding-left:18px;color:#1a1a1a;list-style:none;position:relative}'
+        'li::before{content:"▸";position:absolute;left:0;color:#1d4ed8;font-size:9pt}'
+        'strong{color:#0f172a;font-weight:700}'
+        'em{color:#374151;font-style:italic}'
+        'code{background:#f1f5f9;color:#065f46;padding:1px 5px;border-radius:3px;'
+        'font-family:"Courier New",monospace;font-size:9.5pt;border:1px solid #e2e8f0}'
+        '.footer{border-top:1px solid #cbd5e1;padding-top:10px;margin-top:40px;'
+        'color:#64748b;font-size:9pt;text-align:center}'
+        '</style></head><body>'
+        '<div class="header">'
+        '<h1>OpenRecon Pro — Rapport d\'audit</h1>'
+        '<div class="meta">'
+        'Cible&nbsp;: <strong>' + target + '</strong>&ensp;·&ensp;' + date_str +
+        ('&ensp;·&ensp;' + role_badge if role_badge else '') +
+        '</div></div>'
+        + html_body +
+        '<div class="footer">Généré par OpenRecon Pro — Document confidentiel</div>'
+        '</body></html>'
+    )
+
+
+def export_html(report_text, target, filepath, user_role=''):
     try:
-        import re as _re
-
-        # Conversion Markdown basique -> HTML
-        html_body = report_text
-        # Headers
-        html_body = _re.sub(r'^## (.+)$', r'<h2>\1</h2>', html_body, flags=_re.MULTILINE)
-        html_body = _re.sub(r'^### (.+)$', r'<h3>\1</h3>', html_body, flags=_re.MULTILINE)
-        # Bold
-        html_body = _re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html_body)
-        # Lists
-        html_body = _re.sub(r'^- (.+)$', r'<li>\1</li>', html_body, flags=_re.MULTILINE)
-        # Emojis de risque en badges
-        html_body = html_body.replace('🟢', '<span class="badge green">🟢')
-        html_body = html_body.replace('🟡', '<span class="badge yellow">🟡')
-        html_body = html_body.replace('🟠', '<span class="badge orange">🟠')
-        html_body = html_body.replace('🔴', '<span class="badge red">🔴')
-        # Paragraphes
-        html_body = html_body.replace('\n\n', '</p><p>')
-        html_body = f"<p>{html_body}</p>"
-
-        date_str = datetime.now().strftime('%d/%m/%Y à %H:%M')
-
-        html_content = f"""<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rapport OpenRecon Pro — {target}</title>
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #0f172a; color: #e2e8f0;
-            line-height: 1.7; padding: 40px 20px;
-        }}
-        .container {{ max-width: 900px; margin: 0 auto; }}
-        .header {{
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-            border: 1px solid #334155; border-radius: 12px;
-            padding: 30px; margin-bottom: 30px; text-align: center;
-        }}
-        .header h1 {{ color: #3b82f6; font-size: 28px; margin-bottom: 8px; }}
-        .header .meta {{ color: #94a3b8; font-size: 14px; }}
-        .content {{
-            background: #1e293b; border: 1px solid #334155;
-            border-radius: 12px; padding: 30px;
-        }}
-        h2 {{ color: #3b82f6; margin: 25px 0 12px 0; padding-bottom: 6px; border-bottom: 1px solid #334155; font-size: 20px; }}
-        h3 {{ color: #60a5fa; margin: 18px 0 8px 0; font-size: 16px; }}
-        p {{ margin: 8px 0; }}
-        li {{ margin: 4px 0 4px 20px; }}
-        strong {{ color: #f1f5f9; }}
-        .badge {{ padding: 2px 8px; border-radius: 4px; font-weight: bold; }}
-        .badge.green {{ background: #166534; color: #4ade80; }}
-        .badge.yellow {{ background: #854d0e; color: #facc15; }}
-        .badge.orange {{ background: #9a3412; color: #fb923c; }}
-        .badge.red {{ background: #991b1b; color: #f87171; }}
-        .footer {{
-            text-align: center; margin-top: 30px;
-            color: #64748b; font-size: 12px;
-        }}
-        @media print {{
-            body {{ background: white; color: #1e293b; padding: 20px; }}
-            .header {{ background: #f1f5f9; border-color: #cbd5e1; }}
-            .header h1 {{ color: #1e40af; }}
-            .content {{ background: white; border-color: #cbd5e1; }}
-            h2 {{ color: #1e40af; border-color: #cbd5e1; }}
-            h3 {{ color: #2563eb; }}
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🔎 OPENRECON PRO</h1>
-            <div class="meta">
-                Rapport d'audit de reconnaissance passive<br>
-                Cible : <strong>{target}</strong> — {date_str}
-            </div>
-        </div>
-        <div class="content">
-            {html_body}
-        </div>
-        <div class="footer">
-            Généré par OpenRecon Pro — Rapport confidentiel
-        </div>
-    </div>
-</body>
-</html>"""
-
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(html_content)
-        success(f"Rapport HTML exporté dans : {filepath}")
+        html = export_html_string(report_text, target, user_role)
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(html)
+        success('Rapport HTML exporte: ' + filepath)
         return True
-
     except Exception as e:
-        warning(f"Impossible d'exporter le rapport HTML : {e}")
+        warning('Impossible exporter HTML: ' + str(e))
         return False
-        warning(f"Impossible de sauvegarder le rapport : {e}")
