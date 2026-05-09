@@ -1,30 +1,31 @@
-# 🔎 OpenRecon Pro
+# OpenRecon Pro
 
-OpenRecon Pro est un framework de **reconnaissance passive (OSINT)** léger, modulaire et extensible, écrit en Python. Il permet d'auditer la surface d'exposition d'un domaine et génère automatiquement un **rapport IA** compréhensible par du personnel non technique.
-
----
-
-## ✨ Fonctionnalités
-
-| Module | Description |
-|---|---|
-| 🔍 Sous-domaines | Découverte via crt.sh (passif) + brute-force DNS (actif) |
-| 🌐 Résolution DNS | Résolution multi-thread avec score de confiance |
-| 🛡️ WAF / CDN | Détection Cloudflare, Akamai, Fastly, Sucuri, etc. |
-| 🃏 Wildcard DNS | Détection des zones DNS avec wildcard actif |
-| 📋 RDAP | Lookup du domaine via RDAP (HTTP/JSON — sans blocage réseau) |
-| 🔒 Headers HTTP | Audit de 7 en-têtes de sécurité avec score A → F |
-| 🧬 Technologies | Fingerprinting serveur, CMS, frameworks, analytics, cookies |
-| 🤖 Rapport IA | Rapport Ollama en français, destiné aux décideurs non techniques |
-| 📄 Export HTML | Export du rapport en page HTML stylisée, prête à partager |
-| 💾 Export JSON | Export complet des résultats bruts |
+OpenRecon Pro est un framework de **reconnaissance passive (OSINT)** modulaire, écrit en Python avec une interface web moderne en **SvelteKit**. Il audite la surface d'exposition d'un domaine et génère automatiquement un **rapport IA** compréhensible par tout type de profil (décideur, pentester, développeur, admin système).
 
 ---
 
-## 📦 Installation
+## Fonctionnalités
+
+| Module         | Description                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------- |
+| Sous-domaines  | 4 sources passives (crt.sh, HackerTarget, AlienVault OTX) + brute-force DNS avec scoring de confiance pondéré |
+| Résolution DNS | Résolution multi-thread, déduplication, pénalité wildcard automatique                                         |
+| WAF / CDN      | Détection 3 méthodes : plages CIDR, headers CDN, headers WAF — 13+ providers                                  |
+| Wildcard DNS   | Détection probabiliste par double sondage aléatoire                                                           |
+| RDAP           | Lookup domaine via RDAP (HTTP/JSON) — pas de dépendance port 43                                               |
+| Headers HTTP   | Audit 7 en-têtes avec scoring pondéré (A→F) + validation des valeurs                                          |
+| Technologies   | ~1 800 signatures via webtech (Wappalyzer) — CMS, frameworks, CDN, analytics                                  |
+| Rapport IA     | Ollama (llama3.1:8b) — adapté au profil utilisateur (5 rôles)                                                 |
+| Export         | JSON · TXT · HTML · CSV · PDF (rapport IA) · PDF (analyse brute)                                              |
+| Auto-détection | Entrée sous-domaine ou domaine racine détectée automatiquement                                                |
+| Subscope       | Si sous-domaine fourni, énumération supplémentaire sur ce scope                                               |
+
+---
+
+## Installation
 
 ```bash
-git clone https://github.com/CyberShield-A/OpenRecon-Pro.git
+git clone https://github.com/Tiemtore-dev/OpenRecon-Pro.git
 cd OpenRecon-Pro
 python3 -m venv venv
 source venv/bin/activate
@@ -33,113 +34,150 @@ pip install -r requirements.txt
 
 ### Configuration (`.env`)
 
-Copiez le fichier de configuration et adaptez-le :
-
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Valeur par défaut | Description |
-|---|---|---|
-| `OLLAMA_MODEL` | `llama3.1:8b` | Modèle Ollama utilisé pour le rapport |
-| `OLLAMA_HOST` | `http://localhost:11434` | Adresse du serveur Ollama |
-| `GUI_PORT` | `8080` | Port de l'interface web |
-| `DEFAULT_SCAN_MODE` | `NORMAL` | Mode de scan par défaut |
-| `REQUEST_TIMEOUT` | `10` | Timeout HTTP (secondes) |
+| Variable            | Défaut                   | Description                   |
+| ------------------- | ------------------------ | ----------------------------- |
+| `OLLAMA_MODEL`      | `llama3.1:8b`            | Modèle Ollama pour le rapport |
+| `OLLAMA_HOST`       | `http://localhost:11434` | Adresse du serveur Ollama     |
+| `PORT`              | `6000`                   | Port du backend Flask         |
+| `DEFAULT_SCAN_MODE` | `NORMAL`                 | Mode de scan par défaut       |
+| `REQUEST_TIMEOUT`   | `10`                     | Timeout HTTP (secondes)       |
 
-### Prérequis pour le rapport IA (optionnel)
+### Prérequis rapport IA
 
 ```bash
-# Installer Ollama : https://ollama.com
+# https://ollama.com
 ollama pull llama3.1:8b
 ollama serve
 ```
 
 ---
 
-## 🖥️ Utilisation
+## Utilisation
 
-### CLI — scan simple
+### Interface Web (recommandée)
 
 ```bash
+# Terminal 1 — Backend Flask
+python app.py
+
+# Terminal 2 — Frontend SvelteKit (développement)
+cd frontend
+npm install
+npm run dev
+```
+
+Ouvre `http://localhost:5173` (dev) ou `http://localhost:6000` (prod après `npm run build`).
+
+### CLI
+
+```bash
+# Scan simple
 python recon.py example.com
-```
 
-### CLI — scan avec rapport IA + export HTML
-
-```bash
+# Scan avec rapport IA et export HTML
 python recon.py example.com --report rapport.txt
-# Génère automatiquement rapport.txt ET rapport.html
+
+# Options complètes
+python recon.py <cible> [--output fichier.json] [--stealth] [--aggressive] [--report <fichier.txt>]
 ```
 
-### Toutes les options CLI
-
-```bash
-python recon.py <cible> [--output fichier.json] [--limit N] [--stealth] [--aggressive] [--report <fichier.txt>]
-```
-
-| Option | Description |
-|---|---|
-| `--output` | Exporte les résultats en JSON |
-| `--limit N` | Nombre max de liens analysés |
-| `--stealth` | Mode furtif (moins de requêtes) |
-| `--aggressive` | Mode agressif (plus de threads) |
-| `--report` | Génère le rapport IA (`.txt` + `.html`) |
-
-> **Note** : Le modèle Ollama est défini uniquement dans `.env` côté backend — il n'est pas exposé à l'interface.
-
-### Interface Web (GUI)
-
-```bash
-python gui.py
-```
-
-Ouvre le navigateur sur `http://localhost:8080` (port configurable dans `.env`).
+| Option         | Description                                      |
+| -------------- | ------------------------------------------------ |
+| `--output`     | Export JSON des résultats bruts                  |
+| `--stealth`    | Mode furtif (moins de requêtes)                  |
+| `--aggressive` | Mode agressif (plus de threads, plus de sources) |
+| `--report`     | Génère le rapport IA `.txt` + `.html`            |
 
 ---
 
-## 📁 Structure du projet
+## Architecture
 
 ```
 OpenRecon-Pro/
-├── .env.example          # Template de configuration
-├── .env.example          # Template de configuration
-├── recon.py              # Point d'entrée principal (CLI avancée)
-├── cli.py                # CLI simplifiée
-├── gui.py                # Interface Web (NiceGUI)
+├── app.py                        # Backend Flask — API REST + serving SPA
+├── recon.py                      # Point d'entrée CLI
+├── requirements.txt
 ├── core/
-│   └── engine.py         # Moteur d'orchestration (tous les modules)
+│   └── engine.py                 # Orchestration du pipeline de scan
 ├── modules/
-│   ├── contact.py        # Extraction téléphones / IPs
-│   ├── email.py          # Extraction emails
-│   ├── search.py         # Recherche Bing (filtrage URLs internes)
-│   ├── report.py         # Rapport IA (Ollama) + export HTML
-│   ├── whois_lookup.py   # Lookup RDAP du domaine (sans port 43)
+│   ├── report.py                 # Rapport IA (Ollama) + export HTML/PDF
+│   ├── prompts.py                # Prompts système par rôle utilisateur
+│   ├── whois_lookup.py           # Lookup RDAP
 │   ├── detection/
-│   │   ├── waf_cdn.py    # Détection WAF / CDN
-│   │   ├── wildcard.py   # Détection Wildcard DNS
-│   │   ├── headers.py    # Audit des en-têtes de sécurité HTTP
-│   │   └── tech.py       # Détection de technologies
+│   │   ├── waf_cdn.py            # Détection WAF/CDN (3 méthodes)
+│   │   ├── wildcard.py           # Détection Wildcard DNS
+│   │   ├── headers.py            # Audit en-têtes HTTP (scoring pondéré)
+│   │   └── tech.py               # Fingerprinting via webtech
 │   └── subdomain/
-│       ├── deep_scan.py  # Scan profond de sous-domaines
-│       ├── resolver.py   # Résolution DNS
-│       └── sources.py    # Sources (crt.sh, brute-force)
+│       ├── deep_scan.py          # Orchestration + scoring de confiance
+│       ├── resolver.py           # Résolution DNS multi-thread
+│       ├── sources.py            # Sources : crt.sh, HackerTarget, OTX, bruteforce
+│       └── parent_lookup.py      # Extraction domaine racine
+├── frontend/                     # Interface SvelteKit
+│   ├── src/
+│   │   ├── app.css               # Thème global (Tailwind, palette noir)
+│   │   ├── lib/
+│   │   │   ├── api.js            # Client HTTP vers le backend
+│   │   │   ├── stores.js         # État global Svelte (scan, rapport, stats)
+│   │   │   ├── markdown.js       # Rendu Markdown du rapport IA
+│   │   │   └── components/
+│   │   │       ├── ScanPanel.svelte      # Formulaire de scan + mode
+│   │   │       ├── StatsBar.svelte       # 4 cartes de statistiques
+│   │   │       ├── ResultsPanel.svelte   # Onglets résultats + export
+│   │   │       ├── AIReport.svelte       # Rapport IA + PDF
+│   │   │       └── ConsoleLog.svelte     # Journal en temps réel
+│   │   └── routes/
+│   │       ├── +layout.svelte    # Layout avec navbar
+│   │       └── +page.svelte      # Page principale
+│   ├── tailwind.config.js
+│   ├── svelte.config.js
+│   └── vite.config.js
 └── utils/
-    ├── logger.py         # Affichage coloré
-    └── config.py         # Chargement de la configuration (.env)
+    ├── logger.py                 # Affichage coloré CLI
+    └── config.py                 # Chargement .env
 ```
 
 ---
 
-## 🔐 Sécurité & bonnes pratiques
+## Modes de scan
 
-- Le fichier `.env` **ne doit pas être versionné** (il est exclu par `.gitignore`)
-- Le modèle Ollama est défini **uniquement côté backend** — l'interface web ne peut pas le modifier
-- Toutes les requêtes utilisent HTTPS ; RDAP remplace WHOIS (port 43 souvent bloqué)
-- Aucune donnée de scan n'est envoyée à un service externe
+| Mode         | Comportement                                                       |
+| ------------ | ------------------------------------------------------------------ |
+| `NORMAL`     | Équilibré — sources passives + brute-force limité (20 threads DNS) |
+| `STEALTH`    | Discret — sources passives uniquement, délais entre requêtes       |
+| `AGGRESSIVE` | Complet — toutes sources, 50 threads DNS, brute-force étendu       |
 
 ---
 
-## 📄 Licence
+## Export des résultats
 
-Ce projet est sous licence MIT. Voir [LICENSE](LICENSE).
+Depuis l'interface web, le sélecteur dans la barre d'onglets permet d'exporter :
+
+| Format           | Contenu                                                                     |
+| ---------------- | --------------------------------------------------------------------------- |
+| JSON             | Résultats bruts complets (structure machine)                                |
+| TXT              | Rapport texte lisible                                                       |
+| HTML             | Page HTML stylisée des résultats                                            |
+| CSV              | Liste des sous-domaines (sous-domaine, IPs, confiance)                      |
+| PDF (analyse)    | Document A4 structuré : sous-domaines triés, WAF/CDN, WHOIS, headers, techs |
+| PDF (rapport IA) | Document A4 narratif généré par Ollama pour le profil choisi                |
+
+---
+
+## Sécurité & bonnes pratiques
+
+- Le fichier `.env` n'est pas versionné (exclu par `.gitignore`)
+- Toutes les requêtes utilisent HTTPS — RDAP remplace WHOIS (port 43 souvent bloqué en entreprise)
+- Le modèle Ollama est défini côté backend uniquement
+- Aucune donnée de scan n'est envoyée à un service externe
+- Les résultats sont stockés en mémoire RAM côté serveur (non persistés)
+
+---
+
+## Licence
+
+MIT — voir [LICENSE](LICENSE).
