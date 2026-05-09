@@ -5,10 +5,11 @@ from modules.detection.wildcard import detect_wildcard
 from modules.detection.headers import scan_security_headers
 from modules.detection.tech import detect_technologies
 from modules.whois_lookup import lookup_whois
-from modules.report import generate_report, save_report, export_html
+from modules.report import generate_report, save_report, export_html, export_html_string
 from utils.logger import banner, success, warning
 
-def run(target, mode="NORMAL", live_output=False, ollama_model=None, report_path=None):
+def run(target, mode="NORMAL", live_output=False, ollama_model=None, report_path=None,
+        user_role="chef_entreprise", scan_type="complet"):
     banner()
     results = {
         "subdomains": [],
@@ -29,7 +30,11 @@ def run(target, mode="NORMAL", live_output=False, ollama_model=None, report_path
 
         # 2. Détection WAF/CDN
         detection = detect_cdn_waf(target)
-        results["cdn_waf"] = detection.get("waf") or detection.get("cdn") or "Aucun"
+        results["cdn_waf"] = {
+            "cdn":    detection.get("cdn") or "Aucun",
+            "waf":    detection.get("waf") or "Aucun",
+            "method": detection.get("method", "none"),
+        }
 
         # 3. Vérification Wildcard
         w_status, _ = detect_wildcard(target)
@@ -51,12 +56,17 @@ def run(target, mode="NORMAL", live_output=False, ollama_model=None, report_path
 
         # 7. Génération du rapport IA (optionnel)
         if report_path is not None:
-            report_text = generate_report(target, results, model=ollama_model)
+            report_text = generate_report(
+                target, results,
+                user_role=user_role,
+                scan_type=scan_type,
+                model=ollama_model
+            )
             if report_text:
                 results["report"] = report_text
                 save_report(report_text, report_path)
                 html_path = report_path.replace(".txt", ".html") if report_path.endswith(".txt") else report_path + ".html"
-                export_html(report_text, target, html_path)
+                export_html(report_text, target, html_path, user_role=user_role)
 
     except Exception as e:
         warning(f"[ENGINE ERROR] Erreur lors de l'exécution : {str(e)}")

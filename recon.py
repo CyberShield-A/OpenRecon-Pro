@@ -68,7 +68,8 @@ def main():
     banner()
 
     if len(sys.argv) < 2:
-        print("Usage: python recon.py <target> [--output file.json] [--limit N] [--stealth] [--aggressive] [--model <ollama_model>] [--report <fichier.txt>]")
+        print("Usage: python recon.py <target> [--output file.json] [--limit N] [--stealth] [--aggressive] [--model <ollama_model>] [--role <role>] [--scan-type <type>] [--report <fichier.txt>]")
+        print("Rôles disponibles : etudiant, chef_entreprise, pentester, admin_systeme, developpeur")
         sys.exit(1)
 
     target = sys.argv[1]
@@ -77,6 +78,8 @@ def main():
     mode = "NORMAL"
     ollama_model = None
     report_path = None
+    user_role = "chef_entreprise"
+    scan_type = "complet"
 
     if "--output" in sys.argv:
         idx = sys.argv.index("--output")
@@ -102,6 +105,16 @@ def main():
         if idx + 1 < len(sys.argv):
             ollama_model = sys.argv[idx + 1]
 
+    if "--role" in sys.argv:
+        idx = sys.argv.index("--role")
+        if idx + 1 < len(sys.argv):
+            user_role = sys.argv[idx + 1]
+
+    if "--scan-type" in sys.argv:
+        idx = sys.argv.index("--scan-type")
+        if idx + 1 < len(sys.argv):
+            scan_type = sys.argv[idx + 1]
+
     if "--report" in sys.argv:
         idx = sys.argv.index("--report")
         if idx + 1 < len(sys.argv):
@@ -122,7 +135,9 @@ def main():
         mode=mode,
         live_output=True,
         ollama_model=ollama_model,
-        report_path=report_path
+        report_path=report_path,
+        user_role=user_role,
+        scan_type=scan_type,
     )
 
     final_results = {
