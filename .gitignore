@@ -18,6 +18,10 @@ frontend/.env
 rapport_*.txt
 rapport_*.html
 *.json
+!package.json
+!package-lock.json
+!frontend/package.json
+!frontend/package-lock.json
 
 # Terraform (Crucial pour la sécurité)
 .terraform/
