@@ -20,3 +20,11 @@ rapport_*.html
 # Rapports de sécurité supplémentaires
 bandit-report.txt
 results.xml
+
+
+# Environnement et secrets
+.env
+
+# Données persistantes Docker
+sonarqube_data/
+postgres_data/
