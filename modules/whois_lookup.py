@@ -1,4 +1,5 @@
 # modules/whois_lookup.py
+import socket
 import requests
 from utils.logger import loading, info, warning
 
@@ -19,9 +20,18 @@ def lookup_whois(domain):
         "name_servers": [],
         "registrant": None,
         "emails": [],
+        "ip_addresses": [],
         "dnssec": None,
         "privacy": False
     }
+
+    # Résolution DNS A/AAAA du domaine principal
+    try:
+        infos = socket.getaddrinfo(domain, None)
+        ips = list(dict.fromkeys(i[4][0] for i in infos))  # déduplique
+        result["ip_addresses"] = ips
+    except socket.gaierror:
+        pass
 
     try:
         r = requests.get(
