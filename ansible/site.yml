@@ -3,14 +3,25 @@
   hosts: localhost
   connection: local
   gather_facts: false
+  
   tasks:
-    - name: Attendre que le port 8081 reponde
+    - name: Attendre l'ouverture du port 8081
       wait_for:
         port: 8081
-        delay: 5
-        timeout: 60
+        delay: 5      # Attend 5 secondes avant de commencer à tester
+        timeout: 60   # Échoue si le port n'est pas ouvert après 60s
 
-    - name: Verifier l'acces HTTP
+    - name: Verifier l'accessibilite de l'interface OpenRecon
       uri:
         url: "http://localhost:8081"
         status_code: 200
+        method: GET
+      register: _result
+      # On boucle tant que le code de retour n'est pas 200
+      until: _result.status == 200
+      retries: 10     # On essaie 10 fois
+      delay: 5        # On attend 5 secondes entre chaque essai (Total max: 50s)
+
+    - name: Confirmation du succes
+      debug:
+        msg: "Le service OpenRecon-Pro est operationnel sur http://localhost:8081"
