@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix pour WEBTECH : création manuelle du dossier de base de données
+# Fix pour WEBTECH : création du dossier de base de données
 RUN mkdir -p /root/.local/share/webtech
 
 COPY requirements.txt .
@@ -35,7 +35,7 @@ EXPOSE 5000
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 
-# On force la mise à jour de la base de données webtech au build pour éviter l'erreur au runtime
-RUN python3 -c "import webtech; try: webtech.WebTech().update_database(); except: pass"
+# Correction de la syntaxe Python pour la mise à jour de la base de données
+RUN python3 -c "import webtech; w=webtech.WebTech(); w.update_database()" || true
 
 CMD ["python", "app.py"]
