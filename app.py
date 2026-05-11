@@ -3,6 +3,7 @@ import json
 import uuid
 import threading
 import tempfile
+from datetime import datetime
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 
@@ -15,15 +16,15 @@ except (ImportError, ModuleNotFoundError):
     def run(target, mode): return {"error": "Moteur non chargé"}
 
 app = Flask(__name__)
-# Sécurisation de la clé secrète via variable d'environnement
+# Clé secrète via config ou défaut sécurisé
 app.secret_key = get("SECRET_KEY", "cybercell_prod_key_2026")
 
-# CONFIGURATION DEVOPS : Autorise le frontend sur le port 8081 à lire l'API
+# Indispensable pour que le frontend (8081) puisse lire l'API (5000)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 FRONTEND_BUILD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "build")
 
-# Stockage des résultats (Utilise un dictionnaire partagé pour l'interface graphique)
+# Stockage en mémoire vive pour un affichage instantané
 _scan_results = {}
 _results_lock = threading.Lock()
 
@@ -36,7 +37,7 @@ def serve(path):
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
-    """Point d'entrée principal pour l'interface graphique"""
+    """Route principale appelée par ton bouton 'Lancer le Scan'"""
     data = request.get_json(silent=True) or {}
     target = data.get("target", "").strip()
     mode = data.get("mode", "NORMAL").upper()
@@ -45,32 +46,29 @@ def api_scan():
         return jsonify({"error": "Cible requise"}), 400
 
     try:
-        # Lancement du scan via engine.py
+        # L'exécution du scan (qui trouve tes 24+ cibles)
         results = run(target=target, mode=mode)
         
-        # Génération d'un ID unique pour le suivi dans l'interface
+        # Formatage pour l'interface graphique
         scan_id = str(uuid.uuid4())
         results["scan_id"] = scan_id
-        results["status"] = "completed"
-        results["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        results["target"] = target
+        results["status"] = "success"
+        results["timestamp"] = datetime.now().isoformat()
 
-        # Sauvegarde en mémoire pour récupération par l'interface
+        # Stockage sécurisé pour la persistance session
         with _results_lock:
             _scan_results[scan_id] = results
         
-        # On renvoie l'objet COMPLET pour peupler les tableaux de bord immédiatement
+        # RENVOI COMPLET : C'est ici que tes compteurs se mettent à jour
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/results/<scan_id>", methods=["GET"])
-def get_results(scan_id):
-    """Permet au Frontend de rafraîchir les données d'un scan spécifique"""
-    with _results_lock:
-        results = _scan_results.get(scan_id)
-    if not results:
-        return jsonify({"error": "Résultats introuvables"}), 404
-    return jsonify(results)
+@app.route("/api/health", methods=["GET"])
+def health():
+    """Pour que le voyant 'Status' de ton interface passe au Vert"""
+    return jsonify({"status": "online", "nodes": 1}), 200
 
 @app.route("/api/download/<scan_id>/<fmt>", methods=["GET"])
 def api_download(scan_id, fmt):
@@ -80,8 +78,6 @@ def api_download(scan_id, fmt):
         return jsonify({"error": "ID inconnu"}), 404
 
     target_safe = results.get("target", "scan").replace(".", "_")
-    
-    # Utilisation de tempfile pour éviter les conflits de droits Docker
     with tempfile.NamedTemporaryFile(delete=False, suffix=f".{fmt}") as tmp:
         tmp_path = tmp.name
 
@@ -94,12 +90,8 @@ def api_download(scan_id, fmt):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/health", methods=["GET"])
-def health():
-    return jsonify({"status": "online", "version": "v2.0"}), 200
-
 if __name__ == "__main__":
-    # Paramètres réseau compatibles avec Docker et Terraform
+    # Configuration pour Docker (Hôte 0.0.0.0 impératif)
     listen_host = "0.0.0.0" 
     server_port = int(os.environ.get("PORT", 5000))
     app.run(host=listen_host, port=server_port, debug=False)
