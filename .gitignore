@@ -39,3 +39,16 @@ results.xml
 # Données persistantes Docker
 sonarqube_data/
 postgres_data/
+
+
+.git
+.gitignore
+__pycache__
+*.pyc
+venv
+.env
+.terraform
+terraform.tfstate*
+node_modules
+frontend/dist
+frontend/build
