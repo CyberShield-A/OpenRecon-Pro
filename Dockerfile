@@ -1,38 +1,28 @@
-# --- STAGE 1: Frontend Build ---
-FROM node:20-slim AS build-frontend
-WORKDIR /app/frontend
-COPY frontend/package*.json ./
-RUN npm ci --quiet
-COPY frontend/ ./
-RUN npm run build
-
-# --- STAGE 2: Backend & Runner ---
+# Étape de build pour récupérer le dossier build du frontend
 FROM python:3.10-slim
-WORKDIR /app
 
-# Outils indispensables pour engine.py
+# 1. Installation des dépendances système (Les moteurs)
 RUN apt-get update && apt-get install -y \
-    nmap whois dnsutils curl \
+    nmap \
+    whois \
+    dnsutils \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix Database Webtech
-RUN mkdir -p /root/.local/share/webtech
+WORKDIR /app
 
+# 2. Installation des libs Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
-# On récupère le build du stage 1
-COPY --from=build-frontend /app/frontend/build ./frontend/build
-
-# Variables pour que webtech et nmap fonctionnent
-ENV PYTHONUNBUFFERED=1
-ENV PATH="/root/.local/bin:${PATH}"
-
-# Mise à jour des bases de signatures au build
+# 3. Mise à jour forcée des bases de données de reco
 RUN python3 -m webtech --update || true
+
+# 4. Copie du code et du frontend buildé par Jenkins
+COPY . .
+# S'assure que Flask pourra servir les fichiers statiques
+COPY --from=0 /app/frontend/build ./frontend/build 2>/dev/null || true
 
 EXPOSE 5000
 
-# On lance directement app.py qui sert tout
-CMD ["python", "app.py"]
+CMD ["python3", "app.py"]

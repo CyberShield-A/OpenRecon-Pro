@@ -1,9 +1,8 @@
 pipeline {
     agent any
     environment {
-        // Ces variables servent au log et au nettoyage en cas d'échec
+        DOCKER_IMAGE = "openrecon-app:latest"
         CONTAINER_NAME = "openrecon-service"
-        APP_URL = "http://localhost:8081"
     }
     stages {
         stage('1. Audit & Tests') {
@@ -17,41 +16,38 @@ pipeline {
             }
         }
 
-        stage('2. Build Image') {
-            steps { 
-                // Important : Terraform utilise l'image "openrecon-app:latest"
-                sh "docker build -t openrecon-app:latest ." 
+        stage('2. Build Frontend') {
+            steps {
+                dir('frontend') {
+                    echo "📦 Build du Frontend SvelteKit..."
+                    sh 'npm install'
+                    sh 'npm run build'
+                }
             }
         }
 
-        stage('3. Déploiement (Terraform)') {
+        stage('3. Build Image Docker') {
+            steps { 
+                echo "🔨 Construction de l'image finale..."
+                sh "docker build -t ${DOCKER_IMAGE} . " 
+            }
+        }
+
+        stage('4. Déploiement IaC (Terraform)') {
             steps {
                 dir('terraform') {
                     sh 'terraform init'
-                    // C'est ICI que le conteneur est réellement lancé
                     sh 'terraform apply -auto-approve'
                 }
             }
         }
 
-        stage('4. Vérification (Ansible)') {
+        stage('5. Vérification Ansible') {
             steps {
                 dir('ansible') {
-                    // Exécute d'abord la config DNS puis le test de l'interface
-                    sh 'ansible-playbook -i localhost, -c local setup_env.yml'
                     sh 'ansible-playbook -i localhost, -c local site.yml'
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo "✅ Succès : OpenRecon-Pro est opérationnel sur ${APP_URL}"
-        }
-        failure {
-            echo "❌ Échec détecté. Analyse des logs du conteneur..."
-            sh "docker logs ${CONTAINER_NAME} || true"
         }
     }
 }
