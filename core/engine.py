@@ -1,74 +1,59 @@
 # core/engine.py
-from modules.subdomain.deep_scan import deep_subdomain_scan
-from modules.detection.waf_cdn import detect_cdn_waf
-from modules.detection.wildcard import detect_wildcard
-from modules.detection.headers import scan_security_headers
-from modules.detection.tech import detect_technologies
-from modules.whois_lookup import lookup_whois
-from modules.report import generate_report, save_report, export_html, export_html_string
-from utils.logger import banner, success, warning
+import logging
+from modules.subdomain.scanner import Subscanner
+from modules.recon.webtech_wrapper import TechScanner
+from modules.recon.headers import HeaderAnalyzer
+from modules.recon.whois_lookup import WhoisLookup
 
-def run(target, mode="NORMAL", live_output=False, ollama_model=None, report_path=None,
-        user_role="chef_entreprise", scan_type="complet"):
-    banner()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("OpenRecon-Engine")
+
+def run(target):
+    logger.info(f"🚀 Lancement du scan complet sur : {target}")
+    
+    # Structure de données complète pour gui.py
     results = {
-        "subdomains": [],
-        "cdn_waf": "Aucun",
-        "wildcard": "Désactivé",
+        "target": target,
+        "subdomains": [], # Contiendra Nom + IPs + Confidence (Brute Force)
+        "technologies": {"technologies": []},
+        "security_headers": {"score": 0, "grade": "N/A", "present": [], "missing": {}},
         "whois": {},
-        "security_headers": {},
-        "technologies": {},
-        "report": None
+        "cdn_waf": "Analyse en cours...",
+        "wildcard": "Non"
     }
 
     try:
-        success(f"[ENGINE] Lancement de l'audit profond sur : {target}")
+        # 1. BRUTE FORCE & ÉNUMÉRATION (Sous-domaines + IPs)
+        logger.info("📡 Phase 1 : Énumération et Brute Force des IPs...")
+        scanner = Subscanner(target)
+        # C'est ici que tu récupères la liste des dictionnaires {'subdomain':..., 'ips': [...]}
+        results["subdomains"] = scanner.enumerate() 
+        
+        # 2. IDENTIFICATION DES TECHNOLOGIES
+        # On cible le domaine principal pour le résumé, 
+        # mais on peut aussi boucler sur les sous-domaines si besoin.
+        logger.info("🔍 Phase 2 : Identification des technologies (WebTech)...")
+        tech_scanner = TechScanner()
+        tech_data = tech_scanner.scan(target)
+        if tech_data:
+            results["technologies"] = tech_data
 
-        # 1. Scan de sous-domaines
-        scan_data = deep_subdomain_scan(target=target, mode=mode, live_output=live_output)
-        results["subdomains"] = scan_data.get("results", [])
+        # 3. ANALYSE HEADERS & WHOIS
+        logger.info("🛡️ Phase 3 : Analyse de sécurité et WHOIS...")
+        results["security_headers"] = HeaderAnalyzer().analyze(target)
+        results["whois"] = WhoisLookup().get_info(target)
 
-        # 2. Détection WAF/CDN
-        detection = detect_cdn_waf(target)
-        results["cdn_waf"] = {
-            "cdn":    detection.get("cdn") or "Aucun",
-            "waf":    detection.get("waf") or "Aucun",
-            "method": detection.get("method", "none"),
-        }
+        # 4. DÉDUCTION WAF/CDN (basé sur les IPs ou les Headers)
+        # Si une IP appartient à Cloudflare, on met à jour le champ
+        if results["subdomains"]:
+            # Logique simple de détection WAF
+            first_ips = results["subdomains"][0].get('ips', [])
+            if any("104." in ip for ip in first_ips): # Exemple pour Cloudflare
+                results["cdn_waf"] = "Cloudflare"
 
-        # 3. Vérification Wildcard
-        w_status, _ = detect_wildcard(target)
-        results["wildcard"] = "Activé" if w_status else "Désactivé"
-
-        # 4. RDAP (enregistrement du domaine)
-        success("[ENGINE] Récupération RDAP...")
-        results["whois"] = lookup_whois(target)
-
-        # 5. Audit des en-têtes de sécurité HTTP
-        success("[ENGINE] Audit des en-têtes de sécurité...")
-        results["security_headers"] = scan_security_headers(target)
-
-        # 6. Détection des technologies
-        success("[ENGINE] Détection des technologies...")
-        results["technologies"] = detect_technologies(target)
-
-        success(f"[ENGINE] Scan terminé. {len(results['subdomains'])} cibles trouvées.")
-
-        # 7. Génération du rapport IA (optionnel)
-        if report_path is not None:
-            report_text = generate_report(
-                target, results,
-                user_role=user_role,
-                scan_type=scan_type,
-                model=ollama_model
-            )
-            if report_text:
-                results["report"] = report_text
-                save_report(report_text, report_path)
-                html_path = report_path.replace(".txt", ".html") if report_path.endswith(".txt") else report_path + ".html"
-                export_html(report_text, target, html_path, user_role=user_role)
+        logger.info(f"✅ Scan terminé : {len(results['subdomains'])} cibles identifiées.")
+        return results
 
     except Exception as e:
-        warning(f"[ENGINE ERROR] Erreur lors de l'exécution : {str(e)}")
-
-    return results
+        logger.error(f"❌ Erreur moteur : {str(e)}")
+        return results
