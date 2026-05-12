@@ -10,7 +10,7 @@ RUN npm run build
 FROM python:3.10-slim
 WORKDIR /app
 
-# Installation des outils de reconnaissance (Nmap, Whois, etc.) + Libs PDF
+# Outils de reconnaissance et dépendances PDF
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpango-1.0-0 \
@@ -22,23 +22,20 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix pour WEBTECH : création du dossier pour la base de données
+# Fix pour WEBTECH
 RUN mkdir -p /root/.local/share/webtech
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copie du code source
 COPY . .
-# Importation du build Svelte/Frontend
 COPY --from=build-frontend /app/frontend/build ./frontend/build
 
 EXPOSE 5000
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 
-# CORRECTION : Utilisation de la méthode .update() au lieu de .update_database()
-# Cela permet de télécharger les signatures Wappalyzer pour détecter les technos (WordPress, etc.)
-RUN python3 -c "import webtech; w=webtech.WebTech(); w.update()" || true
+# CORRECTION FINALE : Utilisation du mode module pour la mise à jour
+RUN python3 -m webtech --update || true
 
 CMD ["python", "app.py"]

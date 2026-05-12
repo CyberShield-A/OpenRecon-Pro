@@ -7,7 +7,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 
-# Importation sécurisée du moteur
+# Importation du moteur OpenRecon
 try:
     from core.engine import run
     from utils.config import get
@@ -18,7 +18,7 @@ except (ImportError, ModuleNotFoundError):
 app = Flask(__name__)
 app.secret_key = get("SECRET_KEY", "cybercell_prod_key_2026")
 
-# CORS critique pour l'affichage entre port 8081 et 5000
+# CORS : Permet à l'interface (8081) de communiquer avec l'API (5000)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 FRONTEND_BUILD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "build")
@@ -34,6 +34,7 @@ def serve(path):
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
+    """Lance le scan et renvoie les 24+ cibles à l'interface"""
     data = request.get_json(silent=True) or {}
     target = data.get("target", "").strip()
     mode = data.get("mode", "NORMAL").upper()
@@ -42,7 +43,6 @@ def api_scan():
         return jsonify({"error": "Cible requise"}), 400
 
     try:
-        # L'exécution récupère les 24+ cibles vues dans les logs
         results = run(target=target, mode=mode)
         
         scan_id = str(uuid.uuid4())
@@ -53,14 +53,12 @@ def api_scan():
         with _results_lock:
             _scan_results[scan_id] = results
         
-        # Envoi direct du JSON complet pour peupler l'UI
         return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/health", methods=["GET"])
 def health():
-    # Nécessaire pour le voyant "Status" de l'interface
     return jsonify({"status": "online"}), 200
 
 @app.route("/api/download/<scan_id>/<fmt>", methods=["GET"])
@@ -84,7 +82,7 @@ def api_download(scan_id, fmt):
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    # nosec B104: Autorisé pour l'environnement Docker
-    listen_host = "0.0.0.0" 
+    # Correction Bandit : le commentaire doit être sur la même ligne
+    listen_host = "0.0.0.0"  # nosec B104
     server_port = int(os.environ.get("PORT", 5000))
     app.run(host=listen_host, port=server_port, debug=False)
