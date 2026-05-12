@@ -11,24 +11,31 @@ provider "docker" {
   host = "unix:///var/run/docker.sock"
 }
 
-# Au lieu de "resource", on utilise "data" pour lire l'image existante
-# Cela évite que Terraform essaie de la recréer ou de la supprimer
+# Lecture de l'image buildée par Jenkins
 data "docker_image" "openrecon_app" {
   name = "openrecon-app:latest"
 }
 
 resource "docker_container" "openrecon_service" {
-  # On utilise l'ID récupéré par le bloc data
+  # Utilisation de l'ID dynamique de l'image
   image = data.docker_image.openrecon_app.id
   name  = "openrecon-service"
   
+  # Crucial pour éviter le "Moteur non chargé" en mode Agressif
+  capabilities {
+    add = ["NET_RAW", "NET_ADMIN"]
+  }
+
+  # Sécurité de déploiement
+  must_run = true
+  restart  = "always"
+  memory   = 1024
+
+  # Mappage des ports (8081 pour l'accès externe)
   ports {
     internal = 5000
     external = 8081
   }
-
-  memory = 1024
-  restart = "always"
 
   env = [
     "FLASK_ENV=production",
