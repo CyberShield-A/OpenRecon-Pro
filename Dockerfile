@@ -22,20 +22,23 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix pour WEBTECH : création du dossier de base de données
+# Fix pour WEBTECH : création du dossier pour la base de données
 RUN mkdir -p /root/.local/share/webtech
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copie du code source
 COPY . .
+# Importation du build Svelte/Frontend
 COPY --from=build-frontend /app/frontend/build ./frontend/build
 
 EXPOSE 5000
 ENV FLASK_ENV=production
 ENV PYTHONUNBUFFERED=1
 
-# Correction de la syntaxe Python pour la mise à jour de la base de données
-RUN python3 -c "import webtech; w=webtech.WebTech(); w.update_database()" || true
+# CORRECTION : Utilisation de la méthode .update() au lieu de .update_database()
+# Cela permet de télécharger les signatures Wappalyzer pour détecter les technos (WordPress, etc.)
+RUN python3 -c "import webtech; w=webtech.WebTech(); w.update()" || true
 
 CMD ["python", "app.py"]
