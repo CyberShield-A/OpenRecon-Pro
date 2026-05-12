@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import uuid
 import threading
@@ -8,14 +9,25 @@ from datetime import datetime
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 
+# --- FORCE LE PATH POUR LE MOTEUR ---
+# On ajoute explicitement le répertoire courant au PYTHONPATH
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+
 # --- CHARGEMENT DU MOTEUR ---
+ENGINE_LOADED = False
 try:
     from core.engine import run
     from utils.config import get
+    # Test rapide pour vérifier que ce n'est pas un import vide
+    if callable(run):
+        ENGINE_LOADED = True
 except (ImportError, ModuleNotFoundError) as e:
     print(f"⚠️ Erreur de chargement du moteur : {e}")
     def get(k, default=None): return os.environ.get(k, default)
-    def run(target, mode): return {"error": "Moteur non chargé ou dépendances manquantes"}
+    def run(target, mode): return {"error": f"Moteur non chargé : {str(e)}"}
+    ENGINE_LOADED = False
 
 app = Flask(__name__)
 # On s'assure que la clé est robuste pour la session
@@ -25,7 +37,6 @@ app.secret_key = get("SECRET_KEY", "cybercell_prod_key_2026")
 CORS(app)
 
 # Définition du chemin statique absolu
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FRONTEND_BUILD = os.path.join(BASE_DIR, "frontend", "build")
 
 _scan_results = {}
@@ -52,6 +63,9 @@ def serve(path):
 # --- ROUTES API ---
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
+    if not ENGINE_LOADED:
+        return jsonify({"error": "Le moteur de scan n'est pas opérationnel sur ce serveur"}), 503
+
     data = request.get_json(silent=True) or {}
     target = data.get("target", "").strip().lower()
     mode = data.get("mode", "NORMAL").upper()
@@ -73,9 +87,9 @@ def api_scan():
         results["target"] = target
 
         with _results_lock:
-            # On limite la taille du dictionnaire pour éviter l'OOM (Out Of Memory)
+            # On limite la taille du dictionnaire pour éviter l'OOM
             if len(_scan_results) > 100:
-                _scan_results.clear() # Simple purge, idéalement utiliser un LRU Cache
+                _scan_results.clear() 
             _scan_results[scan_id] = results
         
         return jsonify(results)
@@ -86,7 +100,8 @@ def api_scan():
 def health():
     return jsonify({
         "status": "online",
-        "engine_ready": "core.engine" in globals()
+        "engine_ready": ENGINE_LOADED,
+        "version": "2.0.0-pro"
     }), 200
 
 @app.route("/api/download/<scan_id>/<fmt>", methods=["GET"])
@@ -113,5 +128,4 @@ def api_download(scan_id, fmt):
 if __name__ == "__main__":
     listen_host = "0.0.0.0" # nosec B104
     server_port = int(os.environ.get("PORT", 5000))
-    # Debug=False pour la prod (important pour éviter l'exécution de code arbitraire)
     app.run(host=listen_host, port=server_port, debug=False)
