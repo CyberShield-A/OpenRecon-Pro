@@ -1,7 +1,6 @@
-# Étape de build pour récupérer le dossier build du frontend
 FROM python:3.10-slim
 
-# 1. Installation des dépendances système (Les moteurs)
+# 1. Installation des outils système (moteurs)
 RUN apt-get update && apt-get install -y \
     nmap \
     whois \
@@ -11,17 +10,15 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# 2. Installation des libs Python
+# 2. Installation des dépendances Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 3. Mise à jour forcée des bases de données de reco
+# 3. Initialisation des outils
 RUN python3 -m webtech --update || true
 
-# 4. Copie du code et du frontend buildé par Jenkins
+# 4. Copie de TOUT le projet (incluant le build frontend déjà fait par Jenkins)
 COPY . .
-# S'assure que Flask pourra servir les fichiers statiques
-COPY --from=0 /app/frontend/build ./frontend/build 2>/dev/null || true
 
 EXPOSE 5000
 
