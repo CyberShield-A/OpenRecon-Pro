@@ -1,4 +1,4 @@
-# --- STAGE 1: Frontend ---
+# --- STAGE 1: Frontend Build ---
 FROM node:20-slim AS build-frontend
 WORKDIR /app/frontend
 COPY frontend/package*.json ./
@@ -6,36 +6,33 @@ RUN npm ci --quiet
 COPY frontend/ ./
 RUN npm run build
 
-# --- STAGE 2: Security App ---
+# --- STAGE 2: Backend & Runner ---
 FROM python:3.10-slim
 WORKDIR /app
 
-# Outils de reconnaissance et dépendances PDF
+# Outils indispensables pour engine.py
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpango-1.0-0 \
-    libharfbuzz0b \
-    libpangoft2-1.0-0 \
-    nmap \
-    whois \
-    dnsutils \
-    curl \
+    nmap whois dnsutils curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix pour WEBTECH
+# Fix Database Webtech
 RUN mkdir -p /root/.local/share/webtech
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+# On récupère le build du stage 1
 COPY --from=build-frontend /app/frontend/build ./frontend/build
 
-EXPOSE 5000
-ENV FLASK_ENV=production
+# Variables pour que webtech et nmap fonctionnent
 ENV PYTHONUNBUFFERED=1
+ENV PATH="/root/.local/bin:${PATH}"
 
-# CORRECTION FINALE : Utilisation du mode module pour la mise à jour
+# Mise à jour des bases de signatures au build
 RUN python3 -m webtech --update || true
 
+EXPOSE 5000
+
+# On lance directement app.py qui sert tout
 CMD ["python", "app.py"]
